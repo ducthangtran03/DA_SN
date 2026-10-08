@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bánh sinh nhật 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Baloo+2:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--cream:#fff1d6;--pink:#ff7eb6;--glow:#ffb347;--ink:#160d33;--panel:rgba(30,16,66,.62);
+ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;overflow:hidden;background:radial-gradient(ellipse at 50% 72%,#3d1b5e 0%,#1a0e38 55%,#0a0720 100%);
+ font-family:'Baloo 2','Segoe UI',system-ui,sans-serif;color:var(--cream)}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;touch-action:none;cursor:grab}
+header{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 18px);text-align:center;pointer-events:none;padding:0 16px}
+h1{margin:0;font:400 clamp(2rem,6.4vw,3.8rem)/1.15 Pacifico,'Segoe Script',cursive;color:var(--cream);
+ text-shadow:0 0 18px rgba(255,179,71,.65),0 0 46px rgba(255,126,182,.45);animation:drop 1.4s cubic-bezier(.2,1.3,.4,1) both}
+#who{margin:.25rem 0 0;font-size:clamp(1rem,2.6vw,1.35rem);opacity:.85}
+#who.n{font:700 clamp(1.4rem,4vw,2.2rem)/1.2 'Baloo 2',sans-serif;color:var(--pink);opacity:1;text-shadow:0 0 14px rgba(255,126,182,.6)}
+#toast{position:fixed;left:50%;top:34%;transform:translate(-50%,10px);opacity:0;transition:.5s;pointer-events:none;text-align:center;
+ font:700 clamp(1.2rem,4vw,2rem) 'Baloo 2',sans-serif;color:#fff;text-shadow:0 0 16px var(--glow);padding:0 16px;width:90%}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+nav{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;flex-wrap:wrap;justify-content:center;gap:8px;
+ padding:10px;border-radius:26px;background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);max-width:calc(100% - 20px);width:max-content}
+input,button{font:600 1rem 'Baloo 2',sans-serif;border-radius:18px;border:0;padding:8px 16px;color:var(--cream)}
+input{background:rgba(255,255,255,.12);width:170px;outline:0}
+input::placeholder{color:rgba(255,241,214,.55)}
+button{background:linear-gradient(135deg,#ff7eb6,#ff9a62);color:#2a0f2e;cursor:pointer;transition:transform .15s}
+button:hover{transform:translateY(-2px)}
+button.alt{background:rgba(255,255,255,.14);color:var(--cream)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--cream);outline-offset:2px}
+@keyframes drop{from{transform:translateY(-60px) scale(.9);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){h1{animation:none}#toast{transition:none}}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<header><h1>Chúc mừng sinh nhật</h1><p id="who">Kéo để xoay, cuộn để phóng to</p></header>
+<div id="toast"></div>
+<nav>
+ <input id="name" maxlength="24" placeholder="Nhập tên người nhận" aria-label="Tên người nhận">
+ <button id="bBlow">Thổi nến</button>
+ <button id="bFw" class="alt">Bắn pháo hoa</button>
+ <button id="bMu" class="alt">Bật nhạc</button>
+ <button id="bRot" class="alt">Tự xoay: bật</button>
+</nav>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const V3=THREE.Vector3,R=Math.random,PAL=[0xff7eb6,0xffd166,0x8be0c3,0x7ab8ff,0xc79bff,0xffffff];
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+document.getElementById('stage').appendChild(renderer.domElement);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(42,1,.1,120);
+let baseDist=12.5,zoom=1,camH=3.6;
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h);camera.aspect=w/h;baseDist=Math.max(12.5,7.2/(camera.aspect*.768));camera.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+function glowTex(){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),g=x.createRadialGradient(32,32,0,32,32,32);
+ g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.3,'rgba(255,255,255,.5)');g.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
+const GT=glowTex();
+const mat=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.5},o));
+
+/* Lights */
+scene.add(new THREE.AmbientLight(0x8a7cc0,.7));
+const sun=new THREE.DirectionalLight(0xffe6f0,.9);sun.position.set(5,9,6);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera,{left:-5,right:5,top:5,bottom:-5});scene.add(sun);
+const rim=new THREE.DirectionalLight(0x6a8cff,.6);rim.position.set(-6,4,-6);scene.add(rim);
+
+/* Cake */
+const base=new THREE.Group();base.position.y=-1.5;scene.add(base);
+const cake=new THREE.Group();base.add(cake);
+const table=new THREE.Mesh(new THREE.CircleGeometry(7,64),mat(0x24124a,{roughness:.8}));table.rotation.x=-Math.PI/2;table.position.y=-.01;table.receiveShadow=true;base.add(table);
+const plate=new THREE.Mesh(new THREE.CylinderGeometry(2.9,2.9,.15,64),mat(0xe8e0f0,{metalness:.7,roughness:.25}));plate.position.y=.075;plate.receiveShadow=true;cake.add(plate);
+const lace=new THREE.Mesh(new THREE.TorusGeometry(2.9,.06,12,80),mat(0xffd166,{metalness:.8,roughness:.3}));lace.rotation.x=Math.PI/2;lace.position.y=.1;cake.add(lace);
+
+function tier(r,h,y,col,band,frost){
+ const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,64),mat(col));m.position.y=y+h/2;m.castShadow=m.receiveShadow=true;cake.add(m);
+ const b=new THREE.Mesh(new THREE.TorusGeometry(r+.005,.045,12,64),mat(band));b.rotation.x=Math.PI/2;b.position.y=y+h*.35;cake.add(b);
+ const t=new THREE.Mesh(new THREE.CylinderGeometry(r+.04,r+.04,.08,64),mat(frost,{roughness:.35}));t.position.y=y+h+.01;t.castShadow=true;cake.add(t);
+ const fm=mat(frost,{roughness:.35}),n=Math.round(r*11);
+ for(let i=0;i<n;i++){const a=i/n*6.283+R()*.2,l=.15+R()*.45,x=Math.cos(a)*(r+.03),z=Math.sin(a)*(r+.03);
+  const c=new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,l,10),fm);c.position.set(x,y+h-l/2,z);
+  const s=new THREE.Mesh(new THREE.SphereGeometry(.075,10,10),fm);s.position.set(x,y+h-l,z);cake.add(c,s);}
+ const pm=mat(0xffffff,{metalness:.3,roughness:.2}),pn=Math.round(r*17);
+ for(let i=0;i<pn;i++){const a=i/pn*6.283,p=new THREE.Mesh(new THREE.SphereGeometry(.07,10,10),pm);p.position.set(Math.cos(a)*(r+.06),y+.08,Math.sin(a)*(r+.06));cake.add(p);}
+}
+tier(2.2,1,.15,0x6b3a2a,0xffd166,0xfff1d6);
+tier(1.6,.9,1.15,0xff9ec7,0xffffff,0xffffff);
+tier(1.05,.8,2.05,0xffe8b8,0xff7eb6,0x5a3023);
+
+/* Cherries + cream swirls */
+for(let i=0;i<8;i++){const a=i/8*6.283+.2,x=Math.cos(a)*1.35,z=Math.sin(a)*1.35;
+ const cr=new THREE.Mesh(new THREE.ConeGeometry(.14,.22,14),mat(0xfff7ea,{roughness:.3}));cr.position.set(x,2.27,z);cr.castShadow=true;cake.add(cr);
+ const ch=new THREE.Mesh(new THREE.SphereGeometry(.11,16,16),mat(0xd0102e,{roughness:.15,metalness:.2}));ch.position.set(x,2.46,z);ch.castShadow=true;cake.add(ch);}
+
+/* Sprinkles */
+const SN=220,sp=new THREE.InstancedMesh(new THREE.BoxGeometry(.025,.025,.11),new THREE.MeshStandardMaterial({roughness:.4}),SN),dm=new THREE.Object3D();
+for(let i=0;i<SN;i++){const top=i%2?[1.2,1.65,2.1]:[.4,1.1,1.55],lo=i%2?1.65:1.1,hi=i%2?2.05:1.2;
+ const a=R()*6.283,rr=i%2?1.7+R()*.4:(R()<.5?.15+R()*.3:1.1+R()*.15);
+ dm.position.set(Math.cos(a)*rr,i%2?1.22:2.22,Math.sin(a)*rr);dm.rotation.set(0,R()*6.283,0);dm.updateMatrix();sp.setMatrixAt(i,dm.matrix);sp.setColorAt(i,new THREE.Color(PAL[i%5]));}
+cake.add(sp);
+
+/* Candles + flames */
+const fl=[],cCol=[0xff7eb6,0x7ab8ff,0xffd166,0x8be0c3,0xc79bff];
+for(let i=0;i<5;i++){const a=i/5*6.283,x=Math.cos(a)*.58,z=Math.sin(a)*.58;
+ const c=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.55,14),mat(cCol[i],{roughness:.3}));c.position.set(x,3.15,z);c.castShadow=true;cake.add(c);
+ const f=new THREE.Mesh(new THREE.SphereGeometry(.085,14,14),new THREE.MeshBasicMaterial({color:0xffd35a}));f.position.set(x,3.5,z);cake.add(f);
+ const g=new THREE.Sprite(new THREE.SpriteMaterial({map:GT,color:0xffa830,transparent:true,opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false}));g.scale.setScalar(.9);g.position.set(x,3.52,z);cake.add(g);
+ const l=new THREE.PointLight(0xffa04a,.9,6);l.position.set(x,3.7,z);cake.add(l);fl.push({f,g,l,ph:R()*10,x});}
+
+/* Balloons */
+const balloons=[];
+for(let i=0;i<7;i++){const col=PAL[i%5],g=new THREE.Group(),bm=mat(col,{roughness:.2,metalness:.1});
+ const b=new THREE.Mesh(new THREE.SphereGeometry(.5,24,24),bm);b.scale.y=1.2;g.add(b);
+ const k=new THREE.Mesh(new THREE.ConeGeometry(.07,.12,8),bm);k.position.y=-.65;k.rotation.x=Math.PI;g.add(k);
+ const s=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new V3(0,-.7,0),new V3(0,-3,0)]),new THREE.LineBasicMaterial({color:0xddd6ee,transparent:true,opacity:.6}));g.add(s);
+ const a=-.2+i/6*(Math.PI+.4)*-1-.0;g.position.set(Math.cos(Math.PI*(i/6))*-6.2,1.8+R()*3,-2-R()*3.5);g.userData={ph:R()*6,y0:g.position.y};scene.add(g);balloons.push(g);}
+
+/* Stars + sparkles */
+const sg=new THREE.BufferGeometry(),sa=new Float32Array(600*3);
+for(let i=0;i<600;i++){const v=new V3(R()-.5,R()*.6,R()-.5).normalize().multiplyScalar(45+R()*15);sa.set([v.x,v.y-5,v.z-10],i*3);}
+sg.setAttribute('position',new THREE.BufferAttribute(sa,3));
+const stars=new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:.5,map:GT,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));scene.add(stars);
+const SPN=160,spg=new THREE.BufferGeometry(),spa=new Float32Array(SPN*3);
+for(let i=0;i<SPN;i++)spa.set([(R()-.5)*13,-2+R()*8,(R()-.5)*9],i*3);
+spg.setAttribute('position',new THREE.BufferAttribute(spa,3));
+const spk=new THREE.Points(spg,new THREE.PointsMaterial({color:0xffc27a,size:.28,map:GT,transparent:true,opacity:.8,depthWrite:false,blending:THREE.AdditiveBlending}));spk.frustumCulled=false;scene.add(spk);
+
+/* Confetti */
+const NC=380,cm=new THREE.InstancedMesh(new THREE.PlaneGeometry(.14,.08),new THREE.MeshBasicMaterial({side:THREE.DoubleSide}),NC),cf=[];
+cm.frustumCulled=false;scene.add(cm);
+for(let i=0;i<NC;i++){cf.push({p:new V3(0,-99,0),v:new V3(),r:new V3(),rv:new V3(),a:false});cm.setColorAt(i,new THREE.Color(PAL[i%6]));}
+function confetti(){cf.forEach(c=>{c.p.set((R()-.5)*1.5,1.6+R(),(R()-.5)*1.5);const a=R()*6.283,s=1.5+R()*4.5;
+ c.v.set(Math.cos(a)*s,5+R()*6,Math.sin(a)*s);c.rv.set((R()-.5)*14,(R()-.5)*14,(R()-.5)*14);c.a=true;});}
+
+/* Fireworks + smoke */
+const fws=[],smoke=[];
+function firework(x,y,z,col){const n=90,p=new Float32Array(n*3),v=[];
+ for(let i=0;i<n;i++){const a=R()*6.283,b=Math.acos(2*R()-1),s=2+R()*2;v.push(Math.sin(b)*Math.cos(a)*s,Math.sin(b)*Math.sin(a)*s,Math.cos(b)*s);p.set([x,y,z],i*3);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(p,3));
+ const o=new THREE.Points(g,new THREE.PointsMaterial({color:col,size:.4,map:GT,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
+ o.frustumCulled=false;scene.add(o);fws.push({o,v,t:0});}
+function puff(pos){for(let i=0;i<7;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:GT,color:0xbfb8cc,transparent:true,opacity:.5,depthWrite:false}));
+ s.position.copy(pos).add(new V3((R()-.5)*.1,0,(R()-.5)*.1));s.scale.setScalar(.2);s.userData={v:new V3((R()-.5)*.15,.5+R()*.4,(R()-.5)*.15),t:0};scene.add(s);smoke.push(s);}}
+
+/* Actions */
+let lit=true;const $=id=>document.getElementById(id),toastEl=$('toast');let tt;
+function toast(t){toastEl.textContent=t;toastEl.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>toastEl.classList.remove('on'),3200);}
+function shoot(n){for(let i=0;i<n;i++)setTimeout(()=>firework((R()-.5)*11,1+R()*4.5,-3-R()*4,PAL[Math.floor(R()*6)]),i*330);}
+function blow(){lit=false;fl.forEach(c=>{puff(c.f.getWorldPosition(new V3()));c.f.visible=c.g.visible=false;});
+ $('bBlow').textContent='Thắp lại nến';setTimeout(()=>{confetti();shoot(7);toast('Chúc mọi điều ước thành sự thật!');},450);}
+function relight(){lit=true;fl.forEach(c=>c.f.visible=c.g.visible=true);$('bBlow').textContent='Thổi nến';}
+$('bBlow').onclick=()=>lit?blow():relight();
+$('bFw').onclick=()=>{confetti();shoot(6);};
+$('bRot').onclick=()=>{auto=!auto;$('bRot').textContent='Tự xoay: '+(auto?'bật':'tắt');};
+$('name').oninput=e=>{const v=e.target.value.trim(),w=$('who');w.textContent=v||'Kéo để xoay, cuộn để phóng to';w.classList.toggle('n',!!v);};
+
+/* Music: Happy Birthday (giai điệu dân gian) */
+const SONG="392:.75,392:.25,440:1,392:1,523.25:1,493.88:2,392:.75,392:.25,440:1,392:1,587.33:1,523.25:2,392:.75,392:.25,783.99:1,659.25:1,523.25:1,493.88:1,440:2,698.46:.75,698.46:.25,659.25:1,523.25:1,587.33:1,523.25:2".split(',').map(s=>s.split(':').map(Number));
+let ac,mel=[],mt,musicOn=false;
+function stopMusic(){mel.forEach(o=>{try{o.stop()}catch(e){}});mel=[];clearTimeout(mt);musicOn=false;$('bMu').textContent='Bật nhạc';}
+$('bMu').onclick=()=>{if(musicOn)return stopMusic();
+ ac=ac||new(window.AudioContext||window.webkitAudioContext)();ac.resume();let t=ac.currentTime+.05;const t0=t;
+ SONG.forEach(([f,b])=>{const d=b*.48,o=ac.createOscillator(),g=ac.createGain();o.type='triangle';o.frequency.value=f;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.2,t+.03);g.gain.exponentialRampToValueAtTime(.001,t+d*.95);
+  o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+d);mel.push(o);t+=d;});
+ musicOn=true;$('bMu').textContent='Tắt nhạc';mt=setTimeout(stopMusic,(t-t0+.3)*1000);};
+
+/* Controls */
+let rotY=0,vel=0,auto=true,drag=false,lx=0;const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{drag=true;lx=e.clientX;cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';});
+cv.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-lx;lx=e.clientX;rotY+=dx*.01;vel=dx*.01;camH=Math.min(7,Math.max(.6,camH+e.movementY*.02));});
+['pointerup','pointercancel'].forEach(n=>cv.addEventListener(n,()=>{drag=false;cv.style.cursor='grab';}));
+cv.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.min(1.4,Math.max(.55,zoom*(1+e.deltaY*.001)));},{passive:false});
+
+/* Loop */
+const clock=new THREE.Clock();
+function frame(){requestAnimationFrame(frame);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
+ if(!drag){if(auto)rotY+=dt*.35;else{rotY+=vel;vel*=.95;}}cake.rotation.y=rotY;
+ camera.position.set(0,camH,baseDist*zoom);camera.lookAt(0,.6,0);
+ fl.forEach(c=>{const k=1+Math.sin(t*14+c.ph)*.08+Math.sin(t*23+c.ph*2)*.06;c.f.scale.set(k,1.8*k,k);c.g.material.opacity=.7*k;c.l.intensity=lit?.9*k:Math.max(0,c.l.intensity-dt*4);});
+ balloons.forEach(b=>{const d=b.userData;b.position.y=d.y0+Math.sin(t*.8+d.ph)*.35;b.rotation.z=Math.sin(t*.6+d.ph)*.08;});
+ stars.material.opacity=.65+.3*Math.sin(t*2);stars.rotation.y=t*.01;
+ const pa=spg.attributes.position.array;for(let i=0;i<SPN;i++){pa[i*3+1]+=dt*(.2+(i%5)*.05);if(pa[i*3+1]>6)pa[i*3+1]=-2;}spg.attributes.position.needsUpdate=true;
+ cf.forEach((c,i)=>{if(c.a){c.v.y-=7*dt;if(c.v.y<-1.6)c.v.y=-1.6;c.v.x*=1-.8*dt;c.v.z*=1-.8*dt;c.p.addScaledVector(c.v,dt);c.r.addScaledVector(c.rv,dt);if(c.p.y<-3.2)c.a=false;}
+  dm.position.copy(c.p);dm.rotation.set(c.r.x,c.r.y,c.r.z);dm.scale.setScalar(c.a?1:0);dm.updateMatrix();cm.setMatrixAt(i,dm.matrix);});
+ dm.scale.setScalar(1);cm.instanceMatrix.needsUpdate=true;if(cm.instanceColor)cm.instanceColor.needsUpdate=true;
+ for(let i=fws.length-1;i>=0;i--){const f=fws[i];f.t+=dt;const p=f.o.geometry.attributes.position.array;
+  for(let j=0;j<f.v.length/3;j++){f.v[j*3+1]-=2.5*dt;for(let k=0;k<3;k++){f.v[j*3+k]*=1-.9*dt;p[j*3+k]+=f.v[j*3+k]*dt;}}
+  f.o.geometry.attributes.position.needsUpdate=true;f.o.material.opacity=Math.max(0,1-f.t/1.9);
+  if(f.t>1.9){scene.remove(f.o);f.o.geometry.dispose();f.o.material.dispose();fws.splice(i,1);}}
+ for(let i=smoke.length-1;i>=0;i--){const s=smoke[i],d=s.userData;d.t+=dt;s.position.addScaledVector(d.v,dt);s.scale.addScalar(dt*.5);s.material.opacity=.5*(1-d.t/2.2);
+  if(d.t>2.2){scene.remove(s);s.material.dispose();smoke.splice(i,1);}}
+ renderer.render(scene,camera);}
+frame();
+</script>
+</body>
+</html>
